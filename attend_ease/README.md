@@ -298,40 +298,35 @@ All endpoints are available at `http://localhost:8000`. Full interactive docs at
 
 ## Hardware Integration Guide
 
-This section is for team members integrating the ESP32 BLE beacons and real GPS/face verification into the prototype.
+This section documents how BLE, GPS, and Face Verification are integrated into the AttendEase system.
 
----
+📡 BLE Beacon (ESP32) Integration
 
-### BLE Beacon (ESP32) Integration
+Overview:
+Each classroom is equipped with an ESP32 device that broadcasts a unique BLE identifier. Students must be physically present within range to detect the beacon and pass verification.
 
-**What needs to happen:**  
-Each classroom gets one ESP32 that continuously broadcasts a BLE advertisement with a unique UUID identifying that room. The student's phone scans for this beacon and if it's detected with sufficient signal strength (RSSI), the BLE check passes.
+Implementation:
 
-**Current state in code:**  
-In `frontend/verify.html`, the BLE check is fully simulated:
-```javascript
-// Step 2 - BLE Check (mocked)
-updateStep('bleStep', 'bleIcon', 'bleStatus', 'bleText', 'checking', 'Scanning for classroom beacon...');
-await sleep(1500);
-bleVerified = true;
-updateStep('bleStep', 'bleIcon', 'bleStatus', 'bleText', 'verified', 'Beacon found ✓');
-```
+ESP32 continuously advertises a BLE name (e.g., AttendEase-Room402)
+Student device scans using Web Bluetooth API
+If detected → BLE verification passes
 
-**To replace with real BLE scanning**, use the Web Bluetooth API:
-```javascript
+Frontend (verify.html):
+
 async function scanBLE() {
     try {
         const device = await navigator.bluetooth.requestDevice({
-            filters: [{ name: 'AttendEase-Room402' }]  // match your ESP32 broadcast name
+            filters: [{ name: 'AttendEase-Room402' }]
         });
-        // Device found means student is in range
+
         bleVerified = true;
-        updateStep('bleStep', 'bleIcon', 'bleStatus', 'bleText', 'verified', `Beacon found: ${device.name} ✓`);
+        updateStep('bleStep', 'bleIcon', 'bleStatus', 'bleText', 'verified',
+            `Beacon found: ${device.name} ✓`);
     } catch (err) {
-        updateStep('bleStep', 'bleIcon', 'bleStatus', 'bleText', 'failed', 'Not in classroom');
+        updateStep('bleStep', 'bleIcon', 'bleStatus', 'bleText', 'failed',
+            'Not in classroom');
     }
 }
-```
 
 **ESP32 Arduino code to broadcast BLE:**
 ```cpp
@@ -375,74 +370,33 @@ if data.beacon_id != session["beacon_id"]:
 
 ### GPS Geofencing Integration
 
-**What needs to happen:**  
-The student's phone checks its GPS coordinates. If the coordinates fall within a defined geofence (a radius around the campus), the GPS check passes.
+Overview:
+Ensures students are within campus boundaries before allowing attendance.
 
-**Current state in code:**  
-In `frontend/verify.html`, the GPS check is fully simulated:
-```javascript
-// Step 1 - GPS Check (mocked)
-updateStep('gpsStep', 'gpsIcon', 'gpsStatus', 'gpsText', 'checking', 'Checking location...');
-await sleep(1500);
-gpsVerified = true;
-updateStep('gpsStep', 'gpsIcon', 'gpsStatus', 'gpsText', 'verified', 'On campus ✓');
-```
+Implementation:
 
-**To replace with real GPS**, use the browser Geolocation API:
-```javascript
-async function checkGPS() {
-    return new Promise((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(position => {
-            const lat = position.coords.latitude;
-            const lon = position.coords.longitude;
+Uses browser Geolocation API
+Calculates distance from campus center
+Validates within defined radius
+navigator.geolocation.getCurrentPosition(position => {
+    const lat = position.coords.latitude;
+    const lon = position.coords.longitude;
 
-            // NIT Calicut campus center (replace with your campus coordinates)
-            const CAMPUS_LAT = 11.3218;
-            const CAMPUS_LON = 75.9345;
-            const RADIUS_METERS = 500;
+    const CAMPUS_LAT = 11.3218;
+    const CAMPUS_LON = 75.9345;
+    const RADIUS_METERS = 500;
 
-            const distance = getDistanceMeters(lat, lon, CAMPUS_LAT, CAMPUS_LON);
+    const distance = getDistanceMeters(lat, lon, CAMPUS_LAT, CAMPUS_LON);
 
-            if (distance <= RADIUS_METERS) {
-                gpsVerified = true;
-                updateStep('gpsStep', 'gpsIcon', 'gpsStatus', 'gpsText', 'verified', `On campus ✓ (${Math.round(distance)}m from center)`);
-            } else {
-                updateStep('gpsStep', 'gpsIcon', 'gpsStatus', 'gpsText', 'failed', 'Not on campus');
-            }
-            resolve();
-        }, reject);
-    });
-}
-
-function getDistanceMeters(lat1, lon1, lat2, lon2) {
-    const R = 6371000;
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-              Math.cos(lat1 * Math.PI/180) * Math.cos(lat2 * Math.PI/180) *
-              Math.sin(dLon/2) * Math.sin(dLon/2);
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-}
-```
-
-**To validate GPS server-side** (more secure, prevents spoofing):  
-Send the raw coordinates to the backend and let the server calculate if they're within the geofence. Add lat/lon to the `AttendanceMark` model:
-```python
-class AttendanceMark(BaseModel):
-    session_id: str
-    gps_verified: bool
-    ble_verified: bool
-    face_verified: bool
-    latitude: float   # add these
-    longitude: float  # add these
-```
-
----
+    if (distance <= RADIUS_METERS) {
+        gpsVerified = true;
+    }
+});
 
 ### Face Recognition Integration
 
 **What needs to happen:**  
-The camera opens, captures the student's face, and compares it against the registered photo in the database.
+The camera opens, captures the student's face, and stores it while marking the attendence to check no two faces matched.
 
 **Current state in code:**  
 The camera opens and after 1.5 seconds of "scanning", it marks face as verified for everyone. This is intentional for the prototype demo.
