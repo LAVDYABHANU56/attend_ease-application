@@ -300,7 +300,7 @@ All endpoints are available at `http://localhost:8000`. Full interactive docs at
 
 This section documents how BLE, GPS, and Face Verification are integrated into the AttendEase system.
 
-##📡 BLE Beacon (ESP32) Integration
+## BLE Beacon (ESP32) Integration
 
 Overview:
 Each classroom is equipped with an ESP32 device that broadcasts a unique BLE identifier. Students must be physically present within range to detect the beacon and pass verification.
