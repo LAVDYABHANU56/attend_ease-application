@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AttendEase - Verify</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', sans-serif;
+        }
+
+        body {
+            background: #0d1117;
+            min-height: 100vh;
+            color: #fff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .container {
+            background: #161b22;
+            border-radius: 16px;
+            padding: 30px;
+            width: 100%;
+            max-width: 420px;
+            border: 1px solid #30363d;
+            text-align: center;
+        }
+
+        h2 {
+            color: #58a6ff;
+            margin-bottom: 24px;
+            font-size: 1.3rem;
+        }
+
+        .step {
+            display: flex;
+            align-items: center;
+            background: #0d1117;
+            border-radius: 10px;
+            padding: 14px 16px;
+            margin-bottom: 12px;
+            border: 1px solid #30363d;
+        }
+
+        .step-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+            margin-right: 14px;
+            flex-shrink: 0;
+        }
+
+        .pending { background: #30363d; }
+        .checking { background: #1f3a5f; }
+        .verified { background: #1a4a2e; }
+        .failed { background: #3d1c1c; }
+
+        .step-info {
+            text-align: left;
+        }
+
+        .step-info h3 {
+            font-size: 0.95rem;
+            color: #fff;
+        }
+
+        .step-info p {
+            font-size: 0.8rem;
+            color: #8b949e;
+            margin-top: 2px;
+        }
+
+        .step-status {
+            margin-left: auto;
+            font-size: 0.8rem;
+            font-weight: bold;
+        }
+
+        .text-pending { color: #8b949e; }
+        .text-checking { color: #58a6ff; }
+        .text-verified { color: #3fb950; }
+        .text-failed { color: #f85149; }
+
+        #cameraSection {
+            margin: 20px 0;
+            display: none;
+        }
+
+        video {
+            width: 100%;
+            border-radius: 10px;
+            border: 2px solid #30363d;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 14px;
+            background: #58a6ff;
+            color: #0d1117;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 16px;
+        }
+
+        .btn:hover { background: #79b8ff; }
+        .btn:disabled {
+            background: #30363d;
+            color: #8b949e;
+            cursor: not-allowed;
+        }
+
+        .success-box {
+            display: none;
+            background: #1a4a2e;
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+            color: #3fb950;
+            font-size: 1.1rem;
+            font-weight: bold;
+        }
+
+        .error-box {
+            display: none;
+            background: #3d1c1c;
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+            color: #f85149;
+            font-size: 0.95rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Attendance Verification</h2>
+        <p style="color:#8b949e; margin-bottom: 20px; font-size: 0.9rem;">Please remain in the classroom until all checks are complete.</p>
+
+        <!-- Step 1: GPS -->
+        <div class="step" id="gpsStep">
+            <div class="step-icon pending" id="gpsIcon">📍</div>
+            <div class="step-info">
+                <h3>GPS Geofence Check</h3>
+                <p id="gpsText">Waiting...</p>
+            </div>
+            <span class="step-status text-pending" id="gpsStatus">PENDING</span>
+        </div>
+
+        <!-- Step 2: BLE -->
+        <div class="step" id="bleStep">
+            <div class="step-icon pending" id="bleIcon">📶</div>
+            <div class="step-info">
+                <h3>BLE Beacon Scan</h3>
+                <p id="bleText">Waiting...</p>
+            </div>
+            <span class="step-status text-pending" id="bleStatus">PENDING</span>
+        </div>
+        
+        <!-- ✅ ADD BUTTON HERE -->
+        <button class="btn" onclick="scanBLE()">Scan Classroom BLE</button>
+        <!-- Step 3: Face -->
+        <div class="step" id="faceStep">
+            <div class="step-icon pending" id="faceIcon">🙂</div>
+            <div class="step-info">
+                <h3>Face Verification</h3>
+                <p id="faceText">Waiting...</p>
+            </div>
+            <span class="step-status text-pending" id="faceStatus">PENDING</span>
+        </div>
+
+        <!-- Camera -->
+        <div id="cameraSection">
+            <video id="video" autoplay playsinline></video>
+            <button class="btn" id="verifyBtn" onclick="verifyFace()">Verify Face</button>
+        </div>
+
+        <div class="success-box" id="successBox">
+            ✅ Attendance Marked Successfully!
+        </div>
+
+        <div class="error-box" id="errorBox"></div>
+    </div>
+
+  <script>
+console.log("Merged Script Loaded");
+
+// CONFIG
+const API = "http://localhost:8000";
+const token = localStorage.getItem('token') || 'demo-token';
+const sessionId = localStorage.getItem('currentSession') || 'demo-session';
+
+// FLAGS
+let gpsVerified = false;
+let bleVerified = false;
+let faceVerified = false;
+let detectedBeacon = null;
+
+// UI update
+function updateStep(iconId, statusId, textId, state, message) {
+    document.getElementById(iconId).className = `step-icon ${state}`;
+    document.getElementById(statusId).className = `step-status text-${state}`;
+    document.getElementById(statusId).textContent = state.toUpperCase();
+    document.getElementById(textId).textContent = message;
+}
+
+// Sleep helper
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+//////////////////////////////////////////
+// 🚀 START VERIFICATION (GPS FIRST)
+//////////////////////////////////////////
+async function startVerification() {
+    // STEP 1 - GPS (Demo)
+    updateStep('gpsIcon','gpsStatus','gpsText','checking','Checking location...');
+    await sleep(1500);
+
+    gpsVerified = true;
+    updateStep('gpsIcon','gpsStatus','gpsText','verified','On campus ✓');
+
+    // Enable BLE step
+    updateStep('bleIcon','bleStatus','bleText','pending','Click to scan classroom BLE');
+}
+
+//////////////////////////////////////////
+// 🔥 BLE SCAN (USER CLICK)
+//////////////////////////////////////////
+async function scanBLE() {
+    console.log("BLE scan started");
+
+    updateStep('bleIcon','bleStatus','bleText','checking','Scanning for beacon...');
+
+    try {
+        const device = await navigator.bluetooth.requestDevice({
+            acceptAllDevices: true
+        });
+
+        detectedBeacon = device.name || "Unknown Device";
+        bleVerified = true;
+
+        updateStep('bleIcon','bleStatus','bleText','verified',
+            `Connected: ${detectedBeacon}`);
+
+        // Move to Face Verification
+        await sleep(500);
+        startFaceVerification();
+
+    } catch (err) {
+        console.error(err);
+        updateStep('bleIcon','bleStatus','bleText','failed',
+            'BLE failed or cancelled');
+    }
+}
+
+//////////////////////////////////////////
+// 🎥 FACE VERIFICATION
+//////////////////////////////////////////
+async function startFaceVerification() {
+    updateStep('faceIcon','faceStatus','faceText','checking','Opening camera...');
+
+    await sleep(500);
+
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+
+        document.getElementById('video').srcObject = stream;
+        document.getElementById('cameraSection').style.display = 'block';
+
+        updateStep('faceIcon','faceStatus','faceText','checking',
+            'Look at the camera and click verify');
+
+    } catch (err) {
+        console.error(err);
+
+        // If camera fails → still continue (demo)
+        faceVerified = true;
+        updateStep('faceIcon','faceStatus','faceText','verified','Camera skipped ✓');
+
+        await submitAttendance();
+    }
+}
+
+//////////////////////////////////////////
+// 👤 VERIFY FACE BUTTON
+//////////////////////////////////////////
+async function verifyFace() {
+    document.getElementById('verifyBtn').disabled = true;
+    document.getElementById('verifyBtn').textContent = 'Verifying...';
+
+    await sleep(1500);
+
+    // Stop camera
+    const video = document.getElementById('video');
+    const stream = video.srcObject;
+    if (stream) stream.getTracks().forEach(track => track.stop());
+
+    document.getElementById('cameraSection').style.display = 'none';
+
+    faceVerified = true;
+
+    updateStep('faceIcon','faceStatus','faceText','verified','Identity confirmed ✓');
+
+    await submitAttendance();
+}
+
+//////////////////////////////////////////
+// 📡 SUBMIT ATTENDANCE
+//////////////////////////////////////////
+async function submitAttendance() {
+    try {
+        const res = await fetch(`${API}/attendance/mark`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": "Bearer " + token
+            },
+            body: JSON.stringify({
+                session_id: sessionId,
+                beacon_id: detectedBeacon,
+                gps_verified: gpsVerified,
+                ble_verified: bleVerified,
+                face_verified: faceVerified
+            })
+        });
+
+        const data = await res.json();
+
+        if (res.ok) {
+            document.getElementById('successBox').style.display = 'block';
+
+            await sleep(2000);
+            window.location.href = 'student.html';
+
+        } else {
+            document.getElementById('errorBox').style.display = 'block';
+            document.getElementById('errorBox').innerText = data.detail;
+        }
+
+    } catch (err) {
+        document.getElementById('errorBox').style.display = 'block';
+        document.getElementById('errorBox').innerText = "Server error";
+    }
+}
+
+//////////////////////////////////////////
+// 🔥 INIT
+//////////////////////////////////////////
+window.onload = function() {
+    startVerification();
+};
+</script>

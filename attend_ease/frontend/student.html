@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AttendEase - Student</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', sans-serif;
+        }
+
+        body {
+            background: #0d1117;
+            min-height: 100vh;
+            color: #fff;
+        }
+
+        .navbar {
+            background: #161b22;
+            padding: 16px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #30363d;
+        }
+
+        .navbar h1 {
+            color: #58a6ff;
+            font-size: 1.3rem;
+        }
+
+        .navbar span {
+            color: #8b949e;
+            font-size: 0.9rem;
+        }
+
+        .logout {
+            color: #f85149;
+            cursor: pointer;
+            font-size: 0.9rem;
+            margin-left: 16px;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 40px auto;
+            padding: 0 20px;
+        }
+
+        .card {
+            background: #161b22;
+            border-radius: 16px;
+            padding: 30px;
+            margin-bottom: 20px;
+            border: 1px solid #30363d;
+        }
+
+        .card h2 {
+            color: #58a6ff;
+            margin-bottom: 20px;
+            font-size: 1.2rem;
+        }
+
+        .session-item {
+            background: #0d1117;
+            border-radius: 10px;
+            padding: 16px;
+            margin-bottom: 12px;
+            border: 1px solid #30363d;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .session-info h3 {
+            color: #fff;
+            font-size: 1rem;
+        }
+
+        .session-info p {
+            color: #8b949e;
+            font-size: 0.85rem;
+            margin-top: 4px;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            background: #58a6ff;
+            color: #0d1117;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .btn:hover {
+            background: #79b8ff;
+        }
+
+        .btn-success {
+            background: #2ea043;
+            color: #fff;
+        }
+
+        .btn-success:hover {
+            background: #3fb950;
+        }
+
+        .empty {
+            color: #8b949e;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .status-badge {
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: bold;
+        }
+
+        .present {
+            background: #1a4a2e;
+            color: #3fb950;
+        }
+
+        .absent {
+            background: #3d1c1c;
+            color: #f85149;
+        }
+
+        .loading {
+            color: #8b949e;
+            text-align: center;
+            padding: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="navbar">
+        <h1>AttendEase</h1>
+        <div>
+            <span id="studentName">Student</span>
+            <span class="logout" onclick="logout()">Logout</span>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="card">
+            <h2>📋 Active Sessions</h2>
+            <div id="sessionsList">
+                <div class="loading">Loading sessions...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API = "http://localhost:8000";
+        const token = localStorage.getItem('token');
+        const name = localStorage.getItem('name');
+
+        // Redirect if not logged in
+        if (!token) window.location.href = 'index.html';
+
+        document.getElementById('studentName').textContent = name;
+
+        async function loadSessions() {
+            try {
+                const res = await fetch(`${API}/sessions/active`);
+                const sessions = await res.json();
+
+                const list = document.getElementById('sessionsList');
+
+                if (sessions.length === 0) {
+                    list.innerHTML = '<div class="empty">No active sessions right now</div>';
+                    return;
+                }
+
+                list.innerHTML = '';
+                for (const session of sessions) {
+                    // Check if already marked for this session
+                    const statusRes = await fetch(`${API}/attendance/mystatus/${session.session_id}`, {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    const status = await statusRes.json();
+
+                    const item = document.createElement('div');
+                    item.className = 'session-item';
+                    item.innerHTML = `
+                        <div class="session-info">
+                            <h3>${session.subject}</h3>
+                            <p>Room ${session.room} • ${session.faculty_name}</p>
+                        </div>
+                        ${status.present
+                            ? '<span class="status-badge present">✓ Present</span>'
+                            : `<button class="btn" onclick="markAttendance('${session.session_id}', this)">Mark Attendance</button>`
+                        }
+                    `;
+                    list.appendChild(item);
+                }
+            } catch (err) {
+                document.getElementById('sessionsList').innerHTML = '<div class="empty">Error loading sessions</div>';
+            }
+        }
+
+        async function markAttendance(sessionId, btn) {
+            btn.textContent = 'Verifying...';
+            btn.disabled = true;
+
+            // Redirect to verify page with session id
+            localStorage.setItem('currentSession', sessionId);
+            window.location.href = 'verify.html';
+        }
+
+        function logout() {
+            localStorage.clear();
+            window.location.href = 'index.html';
+        }
+
+        // Load sessions on page load
+        loadSessions();
+
+        // Refresh every 30 seconds
+        setInterval(loadSessions, 30000);
+    </script>
+</body>
+</html>

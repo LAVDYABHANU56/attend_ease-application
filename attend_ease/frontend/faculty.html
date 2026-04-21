@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AttendEase - Faculty</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', sans-serif; }
+        body { background: #0d1117; min-height: 100vh; color: #fff; }
+
+        .navbar {
+            background: #161b22;
+            padding: 16px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #30363d;
+        }
+        .navbar h1 { color: #58a6ff; font-size: 1.3rem; }
+        .navbar span { color: #8b949e; font-size: 0.9rem; }
+        .logout { color: #f85149; cursor: pointer; font-size: 0.9rem; margin-left: 16px; }
+
+        .container { max-width: 700px; margin: 40px auto; padding: 0 20px; }
+
+        .card {
+            background: #161b22;
+            border-radius: 16px;
+            padding: 30px;
+            margin-bottom: 20px;
+            border: 1px solid #30363d;
+        }
+        .card h2 { color: #58a6ff; margin-bottom: 20px; font-size: 1.2rem; }
+
+        .form-row { display: flex; gap: 12px; margin-bottom: 12px; }
+        input {
+            flex: 1;
+            padding: 12px;
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            color: #fff;
+            font-size: 0.95rem;
+            outline: none;
+        }
+        input:focus { border-color: #58a6ff; }
+        input::placeholder { color: #8b949e; }
+
+        .btn {
+            padding: 12px 24px;
+            background: #58a6ff;
+            color: #0d1117;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .btn:hover { background: #79b8ff; }
+        .btn-danger { background: #f85149; color: #fff; }
+        .btn-danger:hover { background: #ff6b6b; }
+        .btn-sm { padding: 8px 16px; font-size: 0.82rem; }
+
+        .session-item {
+            background: #0d1117;
+            border-radius: 10px;
+            padding: 16px;
+            margin-bottom: 12px;
+            border: 1px solid #30363d;
+        }
+        .session-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .session-info h3 { color: #fff; font-size: 1rem; }
+        .session-info p { color: #8b949e; font-size: 0.82rem; margin-top: 3px; }
+
+        .live-badge {
+            background: #1a4a2e;
+            color: #3fb950;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: bold;
+        }
+
+        .student-list { margin-top: 10px; }
+        .student-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-top: 1px solid #30363d;
+            font-size: 0.85rem;
+            color: #c9d1d9;
+        }
+        .student-row span { color: #8b949e; }
+
+        .count-badge {
+            background: #1f3a5f;
+            color: #58a6ff;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            margin-left: 8px;
+        }
+
+        .empty { color: #8b949e; text-align: center; padding: 20px; }
+        .loading { color: #8b949e; text-align: center; padding: 20px; }
+        .msg { color: #3fb950; font-size: 0.85rem; margin-top: 8px; }
+        .error-msg { color: #f85149; font-size: 0.85rem; margin-top: 8px; }
+
+        .session-actions { display: flex; gap: 8px; align-items: center; }
+    </style>
+</head>
+<body>
+    <div class="navbar">
+        <h1>AttendEase</h1>
+        <div>
+            <span id="facultyName">Faculty</span>
+            <span class="logout" onclick="logout()">Logout</span>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- Create Session -->
+        <div class="card">
+            <h2>➕ Start New Session</h2>
+            <div class="form-row">
+                <input type="text" id="subject" placeholder="Subject (e.g. Computer Networks)" />
+                <input type="text" id="room" placeholder="Room (e.g. 402)" style="max-width:140px" />
+            </div>
+            <button class="btn" onclick="createSession()">Start Session</button>
+            <div class="msg" id="createMsg"></div>
+        </div>
+
+        <!-- Active Sessions -->
+        <div class="card">
+            <h2>📋 Active Sessions</h2>
+            <div id="sessionsList">
+                <div class="loading">Loading...</div>
+            </div>
+        </div>
+    </div>
+
+<script>
+const API = "http://localhost:8000";
+const token = localStorage.getItem('token');
+const name = localStorage.getItem('name');
+
+if (!token) window.location.href = 'index.html';
+document.getElementById('facultyName').textContent = name;
+
+// ✅ CREATE SESSION FIXED
+async function createSession() {
+    const subject = document.getElementById('subject').value.trim().toUpperCase();
+    const room = document.getElementById('room').value.trim();
+    const msg = document.getElementById('createMsg');
+
+    // 🔥 SUBJECT FORMAT VALIDATION (XX0000X)
+    const pattern = /^[A-Z]{2}\d{4}[A-Z]?$/;
+
+    if (!pattern.test(subject)) {
+        msg.textContent = '❌ Subject must be like ME3101 or CS1234A';
+        msg.className = 'error-msg';
+        return;
+    }
+
+    if (!room) {
+        msg.textContent = '❌ Enter room number';
+        msg.className = 'error-msg';
+        return;
+    }
+
+    const beaconId = "AttendEase-Room" + room;
+
+    try {
+        const res = await fetch(`${API}/sessions/create`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                subject: subject,
+                room: "Room" + room,
+                beacon_id: beaconId
+            })
+        });
+
+        const text = await res.text();
+        let data;
+
+        try {
+            data = JSON.parse(text);
+        } catch {
+            data = { detail: text };
+        }
+
+        if (res.ok) {
+            msg.textContent = '✅ Session started!';
+            msg.className = 'msg';
+
+            // 🔥 STORE SESSION
+            localStorage.setItem("currentSession", data.session_id);
+
+            document.getElementById('subject').value = '';
+            document.getElementById('room').value = '';
+
+            loadSessions();
+        } else {
+            msg.textContent = '❌ ' + (data.detail || text);
+            msg.className = 'error-msg';
+        }
+
+    } catch (err) {
+        msg.textContent = '❌ Server error';
+        msg.className = 'error-msg';
+        console.error(err);
+    }
+}
+
+// LOAD SESSIONS
+async function loadSessions() {
+    const list = document.getElementById('sessionsList');
+    try {
+        const res = await fetch(`${API}/sessions/active`);
+        const sessions = await res.json();
+
+        if (sessions.length === 0) {
+            list.innerHTML = '<div class="empty">No active sessions</div>';
+            return;
+        }
+
+        list.innerHTML = '';
+
+        for (const session of sessions) {
+
+            const attRes = await fetch(`${API}/attendance/session/${session.session_id}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            const attendees = attRes.ok ? await attRes.json() : [];
+
+            const div = document.createElement('div');
+            div.className = 'session-item';
+
+            const rows = attendees.map(a => `
+                <div class="student-row">
+                    <span style="color:#fff">${a.student_name}</span>
+                    <span>${new Date(a.timestamp).toLocaleTimeString()}</span>
+                </div>
+            `).join('');
+
+            div.innerHTML = `
+                <div class="session-header">
+                    <div class="session-info">
+                        <h3>${session.subject} <span class="count-badge">${attendees.length} present</span></h3>
+                        <p>${session.room} • ${session.faculty_name}</p>
+                    </div>
+                    <div class="session-actions">
+                        <span class="live-badge">● LIVE</span>
+                        <button class="btn btn-danger btn-sm" onclick="closeSession('${session.session_id}')">Close</button>
+                    </div>
+                </div>
+                <div class="student-list">
+                    ${attendees.length === 0
+                        ? '<div style="color:#8b949e;font-size:0.85rem;padding:8px 0">No students yet</div>'
+                        : rows}
+                </div>
+            `;
+
+            list.appendChild(div);
+        }
+
+    } catch {
+        list.innerHTML = '<div class="empty">Error loading sessions</div>';
+    }
+}
+
+// CLOSE SESSION
+async function closeSession(sessionId) {
+    if (!confirm('Close this session?')) return;
+
+    try {
+        await fetch(`${API}/sessions/close/${sessionId}`, {
+            method: 'PUT'
+        });
+
+        loadSessions();
+    } catch {
+        alert('Error closing session');
+    }
+}
+
+function logout() {
+    localStorage.clear();
+    window.location.href = 'index.html';
+}
+
+loadSessions();
+setInterval(loadSessions, 10000);
+</script>
+</body>
+</html>
